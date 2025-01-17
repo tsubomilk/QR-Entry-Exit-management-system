@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <title>NRM QRReader</title>
+    <style>
+        body,
+        html {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: url('https://tsubomilk.github.io/NRM-QRreader-sozai/qr-KV.jpg') no-repeat center center fixed;
+            background-size: cover;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .logo {
+            width: 33.3%;
+            margin: 0 auto;
+        }
+
+        .header {
+            font-size: 2em;
+            font-weight: bold;
+            color: #fff;
+            background-color: #3498db;
+            margin: 20px 0 0 0;
+            padding: 10px 20px;
+            border: 2px solid #3498db;
+            display: inline-block;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 50px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 1400px;
+            position: relative;
+        }
+
+        .content {
+            width: 100%;
+        }
+
+        #reader {
+            width: 100%;
+            height: auto;
+            margin: 0 auto;
+            overflow-y: auto;
+        }
+
+        #sound {
+            margin-top: 10px;
+            width: 150px;
+            padding: 5px;
+        }
+
+        #result-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .alert-info {
+            margin-top: 10px;
+            width: 300px;
+            height: 50px;
+            line-height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .button-group {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .button-group form {
+            flex: 1;
+        }
+
+        .button-group button {
+            width: 130px;
+            /* 固定幅を指定 */
+        }
+
+        .btn-checkin {
+            color: #fff;
+            background-color: #E74C3C;
+            border-color: #E74C3C;
+        }
+
+        .btn-activity {
+            color: #fff;
+            background-color: #3cd0e7;
+            border-color: #3cd0e7;
+        }
+
+        .btn-checkin:hover,
+        .btn-activity:hover {
+            background-color: grey;
+            border-color: grey;
+            color: white;
+            /* 文字色を白に固定 */
+        }
+
+        #activity-select {
+            max-width: 350px;
+            /* ドロップダウンの幅を縮小 */
+            border: 2px solid #3cd0e7;
+            /* 強調された枠線 */
+            margin: 0 auto;
+        }
+
+        .dropdown-container {
+            display: flex;
+            justify-content: center;
+        }
+
+        #video {
+            width: 100%;
+            max-width: 600px;
+        }
+
+        #output {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        #beepButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+
+        canvas {
+            display: none;
+        }
+
+        #flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 9999;
+            transition: opacity 0.2s ease;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <img src="https://tsubomilk.github.io/NRM-QRreader-sozai/NRM%20-bglogo.png" class="logo" alt="Logo">
+        <div class="header">Check OUT</div>
+
+        <div id="flash"></div>
+        <div class="content">
+            <div id="result-container" class="text-center">
+                <div id="output" class="alert alert-info text-center" role="alert"></div>
+            </div>
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+
+        </div>
+        <div class="button-group">
+            <form method="POST" action="<?= deployURL ?>">
+                <button type="submit" class="btn btn-checkin" name="checkin" value="true">Check INへ</button>
+            </form>
+            <form method="POST" action="<?= deployURL ?>">
+                <button type="submit" class="btn btn-activity" name="activity" value="true">Program INへ</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const canvasContext = canvas.getContext('2d');
+        const output = document.getElementById('output');
+        const beepButton = document.getElementById('beepButton');
+        let lastDecodedText = '';  // 変数を初期化
+
+        // QRコードが正常に読み取られた時の処理
+        function onScanSuccess(decodedText) {
+            if (decodedText && lastDecodedText !== decodedText) {  // 新しいQRコードを読み取った場合のみ処理
+                lastDecodedText = decodedText;
+                output.textContent = `${decodedText}`;
+                beep();  // ビープ音を鳴らす
+
+                // 光のフラッシュ効果を発動
+                const flash = document.getElementById('flash');
+                flash.style.opacity = 1;
+                setTimeout(() => flash.style.opacity = 0, 100); // フラッシュの持続時間を100ミリ秒に設定
+
+                // Google Apps Script にデータを送信
+                google.script.run
+                    .withFailureHandler(function (error) {
+                        append(`"${decodedText}"の保存に失敗しました: ${error}`);
+                    })
+                    .onCheckoutScan(decodedText);
+            }
+        }
+
+        // ビープ音を鳴らす関数
+        function beep() {
+            const audio = new Audio("https://tsubomilk.github.io/NRM-QRreader-sozai/decide1.mp3");
+            audio.play().catch(function (error) {
+                console.error("ビープ音の再生に失敗しました: ", error);
+            });
+        }
+
+        // カメラの映像を取得する
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(function (stream) {
+                video.srcObject = stream;
+                video.play();
+                requestAnimationFrame(tick);
+            });
+
+        function tick() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                // Canvasのサイズをビデオのサイズに合わせる
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                // ビデオのフレームをCanvasに描画
+                canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // QRコードを読み取る
+                const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                if (code) {
+                    onScanSuccess(code.data);
+                }
+            }
+            // 次のフレームを処理
+            requestAnimationFrame(tick);
+        }
+
+    </script>
+</body>
+
+</html>
